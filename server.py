@@ -62,23 +62,25 @@ async def add_reaction(client: httpx.AsyncClient, message_id: str, emoji: str):
     response.raise_for_status()
 
 @mcp.tool()
-async def raise_hand(reason: str, message: str) -> str:
+async def raise_hand(message: str) -> str:
     """
     Call this tool when you need human assistance, encounter a problem you cannot solve,
     or need input on how to proceed. This will post a message to a human and pause your
     execution until the human replies. Consider this a "distress call" to get help from a human operator.
-    
+
     Args:
-        reason: A short summary of why you are raising your hand (e.g., "Need confirmation on API key", "Stuck on weird bug").
-        message: The full detailed message you want to send to the human.
-    
+        message: The message to send to the human. Must be under 150 characters.
+
     Returns:
         The response from the human or emoji reaction to your message.
     """
     if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
         return "Error: Discord bot token or channel ID not configured on the server."
-    
-    formatted_message = f"**🤖 AI Agent Distress Call**\n**Reason:** {reason}\n**Message:**\n{message}\n\n*Please reply in this channel to resume the agent.*"
+
+    if len(message) >= 150:
+        return "Error: message must be under 150 characters. Reword it shorter and try again."
+
+    formatted_message = f"{message}. *(Please reply to this directly!)*"
     
     async with httpx.AsyncClient() as client:
         try:
