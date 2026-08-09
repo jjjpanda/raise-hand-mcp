@@ -66,14 +66,14 @@ async def raise_hand(reason: str, message: str) -> str:
     """
     Call this tool when you need human assistance, encounter a problem you cannot solve,
     or need input on how to proceed. This will post a message to a human and pause your
-    execution until the human replies.
+    execution until the human replies. Consider this a "distress call" to get help from a human operator.
     
     Args:
         reason: A short summary of why you are raising your hand (e.g., "Need confirmation on API key", "Stuck on weird bug").
         message: The full detailed message you want to send to the human.
     
     Returns:
-        The response from the human.
+        The response from the human or emoji reaction to your message.
     """
     if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
         return "Error: Discord bot token or channel ID not configured on the server."
