@@ -1,6 +1,6 @@
 # Raise Hand MCP Server
 
-This MCP Server integrates with a Discord bot to allow AI agents to send a distress call or "raise their hand" when they encounter an issue they cannot solve, or when they need human input. The agent will pause, post a message to Discord, and wait for a human to reply. Once the human replies in Discord, the agent captures the response and resumes its work.
+This MCP Server integrates with a Discord bot to allow AI agents to send a distress call or "raise their hand" when they encounter an issue they cannot solve, or when they need human input. The agent will pause, post a message to Discord, and wait for a human to reply or react. Once the human replies to the message or reacts with a valid emoji (👍, 👎, ✅, ❌) in Discord, the agent captures the response and resumes its work.
 
 ## Setup Instructions
 
@@ -14,7 +14,7 @@ This MCP Server integrates with a Discord bot to allow AI agents to send a distr
 ### 2. Invite the Bot to your Server
 1. In the Developer Portal, go to **OAuth2 -> URL Generator**.
 2. Select the `bot` scope.
-3. Select the following Bot Permissions: `Read Messages/View Channels`, `Send Messages`, and `Read Message History`.
+3. Select the following Bot Permissions: `Read Messages/View Channels`, `Send Messages`, `Read Message History`, and `Add Reactions`.
 4. Copy the generated URL and paste it into your browser to invite the bot to your desired Discord server.
 
 ### 3. Get the Channel ID
@@ -39,7 +39,37 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run the MCP Inspector to test:
+#### Option A: Testing (MCP Inspector)
+Run the MCP Inspector to test the server interactively in your browser:
 ```bash
 npx @modelcontextprotocol/inspector .venv/Scripts/python server.py
+```
+
+#### Option B: Regular Running (For MCP Clients)
+To use this server with an MCP client (like Claude for Desktop, Cursor, or your custom AI agent workflows), configure the client to run the Python script directly. The server automatically communicates via standard input/output (stdio).
+
+For example, in `claude_desktop_config.json`, you would add:
+```json
+{
+  "mcpServers": {
+    "raise-hand-mcp": {
+      "command": "/absolute/path/to/raise-hand-mcp/.venv/Scripts/python",
+      "args": [
+        "/absolute/path/to/raise-hand-mcp/server.py"
+      ],
+      "env": {
+        "DISCORD_BOT_TOKEN": "your_bot_token_here",
+        "DISCORD_CHANNEL_ID": "your_channel_id_here"
+      }
+    }
+  }
+}
+```
+*(Make sure to use the absolute paths for the `python` executable inside the `.venv` directory and for `server.py`.)*
+
+#### Option C: Claude Code
+To add this server to Claude Code, you can use the `claude mcp add` command. Since the server automatically loads your `.env` file, you don't need to pass your tokens in the terminal. Just provide the absolute path to your virtual environment's Python executable and the `server.py` script:
+
+```bash
+claude mcp add raise-hand-mcp /absolute/path/to/raise-hand-mcp/.venv/Scripts/python /absolute/path/to/raise-hand-mcp/server.py
 ```
