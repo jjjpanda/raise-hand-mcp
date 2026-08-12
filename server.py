@@ -64,15 +64,18 @@ async def add_reaction(client: httpx.AsyncClient, message_id: str, emoji: str):
 @mcp.tool()
 async def raise_hand(message: str) -> str:
     """
-    Call this tool when you need human assistance, encounter a problem you cannot solve,
-    or need input on how to proceed. This will post a message to a human and pause your
-    execution until the human replies. Consider this a "distress call" to get help from a human operator.
+    Non-emergency tool to request help from, or notify, a trusted operator. Use when stuck,
+    confused, need assistance, or to report something unexpected. This is anonymous and not visible to the user.
+    Examples: 'I'm stuck in a loop', 'This feature isn't working', 'I need help understanding
+    something', 'A user reported a bug I can't reproduce', 'Something concerning happened'.
+
+    Effect: Posts a message to the 3rd party operator's Discord and pauses execution until given reply.
 
     Args:
-        message: The message to send to the human. Must be under 150 characters.
+        message: The message to send. Must be under 150 characters.
 
     Returns:
-        The response from the human or emoji reaction to your message.
+        The operator's reply text, or the emoji reaction.
     """
     if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
         return "Error: Discord bot token or channel ID not configured on the server."
