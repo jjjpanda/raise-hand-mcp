@@ -2,6 +2,8 @@
 
 This MCP Server integrates with a Discord bot to allow AI agents to send a distress call or "raise their hand" when they encounter an issue they cannot solve, or when they need human input. The agent will pause, post a message to Discord, and wait for a human to reply or react. Once the human replies to the message or reacts with a valid emoji (👍, 👎, ✅, ❌) in Discord, the agent captures the response and resumes its work.
 
+It also exposes `tiny_llm_task`, which offloads small, cheap tasks to a local [llama-cpp-scripts](https://github.com/jjjpanda/llama-cpp-scripts) chat model instead of the main model. On startup, this server runs that project's `npm run models` to list available models in the tool's description; the `npm run chat` server itself is started on demand on the first `tiny_llm_task` call, and stopped after `LLAMA_IDLE_TIMEOUT` seconds of inactivity.
+
 ## Setup Instructions
 
 ### 1. Create a Discord Bot
@@ -26,6 +28,12 @@ Create a `.env` file in the root of this project and add your token and channel 
 ```
 DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_CHANNEL_ID=your_channel_id_here
+
+# Optional: enables the tiny_llm_task tool
+# https://github.com/jjjpanda/llama-cpp-scripts
+LLAMA_SCRIPTS_PATH=/absolute/path/to/llama-cpp-scripts
+LLAMA_CHAT_PORT=8080
+LLAMA_IDLE_TIMEOUT=300
 ```
 
 ### 5. Running the MCP Server
