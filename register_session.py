@@ -6,7 +6,10 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sys
 import uuid
+
+from dotenv import load_dotenv
 
 from messaging import AccessError, load_registry
 
@@ -42,13 +45,52 @@ def register(name: str, config: Path) -> tuple[str, Path]:
     return session_id, session_file.resolve()
 
 
-if __name__ == "__main__":
+def client_config(client: str, config: Path, session_file: Path) -> str:
+    """Render a config snippet containing credential paths, never credential values."""
+    # Preserve the venv executable even when it is a symlink on Unix.
+    command = Path(sys.executable).absolute().as_posix()
+    script = Path(__file__).with_name("server.py").resolve().as_posix()
+    env = {
+        "RAISE_HAND_CONFIG": config.resolve().as_posix(),
+        "RAISE_HAND_SESSION_FILE": session_file.resolve().as_posix(),
+    }
+    if client == "codex":
+        return "\n".join([
+            "[mcp_servers.raise-hand-mcp]",
+            f"command = {json.dumps(command, ensure_ascii=False)}",
+            f"args = [{json.dumps(script, ensure_ascii=False)}]",
+            "tool_timeout_sec = 600",
+            "",
+            "[mcp_servers.raise-hand-mcp.env]",
+            *(f"{key} = {json.dumps(value, ensure_ascii=False)}" for key, value in env.items()),
+        ])
+    server = {"command": command, "args": [script], "env": env}
+    if client == "claude-code":
+        server["type"] = "stdio"
+    return json.dumps({"mcpServers": {"raise-hand-mcp": server}}, indent=2)
+
+
+def main(argv: list[str] | None = None) -> None:
+    load_dotenv(Path(__file__).with_name(".env"))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name")
-    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("channels.json"))
-    args = parser.parse_args()
+    parser.add_argument("--config", type=Path,
+                        default=os.getenv("RAISE_HAND_CONFIG") or Path(__file__).with_name("channels.json"))
+    parser.add_argument("--client", choices=("claude-code", "codex", "antigravity"),
+                        help="Print a ready-to-paste MCP config for this client.")
+    args = parser.parse_args(argv)
+    config = args.config.resolve()
     try:
-        session_id, session_file = register(args.name, args.config.resolve())
-    except (AccessError, OSError):
-        parser.exit(1, "Registration failed. Check the name, shared config, and file permissions.\n")
+        session_id, session_file = register(args.name, config)
+    except AccessError as error:
+        parser.exit(1, f"Registration failed: {error}\n")
+    except OSError:
+        parser.exit(1, "Registration failed. Check shared config and file permissions.\n")
     print(f"Session ID: {session_id}\nRAISE_HAND_SESSION_FILE={session_file}")
+    if args.client:
+        print(f"\nMerge this into your {args.client} MCP configuration, then reconnect:\n")
+        print(client_config(args.client, config, session_file))
+
+
+if __name__ == "__main__":
+    main()

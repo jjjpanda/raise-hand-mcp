@@ -18,8 +18,9 @@ from test_messaging import policy, ROOT
 
 
 class StdioTests(unittest.IsolatedAsyncioTestCase):
-    async def test_three_processes_share_history_and_enforce_acl(self):
+    async def test_three_processes_share_main_chat_and_focused_threads(self):
         history = {"111": [], "222": []}
+        threads = {}
         calls = []
         lock = threading.Lock()
 
@@ -33,9 +34,16 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                 params = parse_qs(parsed.query)
                 with lock:
                     calls.append(("GET", channel))
+                    if len(parsed.path.split("/")) == 5:
+                        self.respond(threads[channel])
+                        return
                     messages = history[channel][:]
                 if "after" in params:
                     messages = [m for m in messages if int(m["id"]) > int(params["after"][0])]
+                if "before" in params:
+                    messages = [m for m in messages if int(m["id"]) < int(params["before"][0])]
+                limit = int(params.get("limit", [50])[0])
+                messages = messages[:limit] if "after" in params else messages[-limit:]
                 self.respond(list(reversed(messages)))
 
             def do_POST(self):
@@ -43,6 +51,15 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 with lock:
                     calls.append(("POST", channel))
+                    if self.path.endswith("/threads"):
+                        source_id = self.path.split("/")[6]
+                        source = next(m for m in history[channel] if m["id"] == source_id)
+                        topic = {"id": source_id, "name": body["name"], "parent_id": channel, "type": 11}
+                        source["thread"] = topic
+                        threads[source_id] = topic
+                        history[source_id] = []
+                        self.respond(topic)
+                        return
                     message = {"id": str(10 + sum(map(len, history.values()))), "content": body["content"],
                                "author": {"id": "999", "username": "bot", "bot": True},
                                "message_reference": body.get("message_reference", {})}
@@ -79,31 +96,33 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                         )
                         clients[name] = await stack.enter_async_context(Client(transport, timeout=20, init_timeout=30))
                     for name, client in clients.items():
-                        result = await client.call_tool("send_message", {"channel": "public", "message": f"hello from {name}"})
+                        result = await client.call_tool("send_message", {"channel": "main", "message": f"hello from {name}"})
                         self.assertEqual(result.data["session"]["id"], name)
                     for client in clients.values():
-                        result = await client.call_tool("read_messages", {"channel": "public"})
+                        result = await client.call_tool("read_messages", {"channel": "main"})
                         self.assertEqual(len(result.data["messages"]), 3)
-                    private = await clients["claude"].call_tool("send_message", {"channel": "private", "message": "plan"})
-                    await clients["codex"].call_tool("send_message", {"channel": "private", "message": "agreed", "reply_to": private.data["message"]["id"]})
-                    for name in ("claude", "codex"):
-                        result = await clients[name].call_tool("read_messages", {"channel": "private"})
+                    discussion = await clients["claude"].call_tool("start_thread", {
+                        "channel": "main", "message_id": "10", "name": "Implementation plan"})
+                    topic = discussion.data["thread"]["id"]
+                    first = await clients["claude"].call_tool("send_message", {
+                        "channel": "main", "thread_id": topic, "message": "plan"})
+                    await clients["codex"].call_tool("send_message", {
+                        "channel": "main", "thread_id": topic, "message": "agreed", "reply_to": first.data["message"]["id"]})
+                    for client in clients.values():
+                        result = await client.call_tool("read_messages", {"channel": "main", "thread_id": topic})
                         self.assertEqual(len(result.data["messages"]), 2)
-                    count = len(calls)
-                    for tool, arguments in (
-                        ("read_messages", {"channel": "private"}),
-                        ("send_message", {"channel": "private", "message": "blocked"}),
-                    ):
-                        result = await clients["antigravity"].call_tool(tool, arguments, raise_on_error=False)
-                        self.assertTrue(result.is_error)
-                    legacy = await clients["antigravity"].call_tool("raise_hand", {"message": "blocked"})
-                    self.assertIn("unavailable", legacy.data)
-                    self.assertEqual(len(calls), count)
-                    # Change the shared policy while all processes remain running.
+                    await clients["antigravity"].call_tool("send_message", {
+                        "channel": "main", "thread_id": topic, "message": "joining the discussion"})
+                    main = await clients["codex"].call_tool("read_messages", {"channel": "main"})
+                    self.assertEqual(len(main.data["messages"]), 3)
+                    self.assertEqual(main.data["messages"][0]["thread_id"], topic)
+                    # Revoking a credential still applies to all running processes.
                     data = policy()
-                    data["channels"]["private"]["allowed_sessions"] = ["claude"]
+                    del data["sessions"]["codex"]
                     config.write_text(json.dumps(data), encoding="utf-8")
-                    denied = await clients["codex"].call_tool("read_messages", {"channel": "private"}, raise_on_error=False)
+                    count = len(calls)
+                    denied = await clients["codex"].call_tool("read_messages", {
+                        "channel": "main", "thread_id": topic}, raise_on_error=False)
                     self.assertTrue(denied.is_error)
                     self.assertEqual(len(calls), count)
         finally:

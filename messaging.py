@@ -1,4 +1,4 @@
-"""Shared, file-backed authorization; Discord remains the only message store."""
+"""Shared session identities and channel aliases; Discord stores conversations."""
 
 import hashlib
 import hmac
@@ -52,14 +52,8 @@ def load_registry(path: Path) -> dict:
                 raise ValueError
             channel_id = snowflake(channel["id"])
             if channel_id == "0" or channel_id in channel_ids:
-                raise ValueError  # Cannot alias a private channel as public.
+                raise ValueError
             channel_ids.add(channel_id)
-            if channel["visibility"] not in ("public", "private"):
-                raise ValueError
-            allowed = channel.get("allowed_sessions", [])
-            if (not isinstance(allowed, list)
-                    or any(not isinstance(s, str) or s not in sessions for s in allowed)):
-                raise ValueError
         return data
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         raise AccessError("Shared messaging configuration is missing or invalid.") from None
@@ -85,7 +79,6 @@ class Registry:
             selected = next((c for c in data["channels"].values() if c["id"] == channel), None)
         else:
             selected = data["channels"].get(channel)
-        if selected is None or (selected["visibility"] == "private"
-                               and identity["id"] not in selected.get("allowed_sessions", [])):
-            raise AccessError("Channel is unavailable to this session.")
+        if selected is None:
+            raise AccessError("Channel is not configured.")
         return identity, selected

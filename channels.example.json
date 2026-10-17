@@ -1,14 +1,8 @@
 {
   "sessions": {},
   "channels": {
-    "public": {
-      "id": "111111111111111111",
-      "visibility": "public"
-    },
-    "private": {
-      "id": "222222222222222222",
-      "visibility": "private",
-      "allowed_sessions": []
+    "main": {
+      "id": "111111111111111111"
     }
   }
 }
