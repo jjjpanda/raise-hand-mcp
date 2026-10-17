@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "raise-hand-mcp": {
+      "type": "stdio",
+      "command": "C:/path/to/raise-hand-mcp/.venv/Scripts/python.exe",
+      "args": ["C:/path/to/raise-hand-mcp/server.py"],
+      "env": {
+        "RAISE_HAND_CONFIG": "C:/path/to/raise-hand-mcp/channels.json",
+        "RAISE_HAND_SESSION_FILE": "C:/path/to/raise-hand-mcp/.sessions/CLAUDE_SESSION_UUID.env"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+[mcp_servers.raise-hand-mcp]
+command = 'C:/path/to/raise-hand-mcp/.venv/Scripts/python.exe'
+args = ['C:/path/to/raise-hand-mcp/server.py']
+tool_timeout_sec = 600
+
+[mcp_servers.raise-hand-mcp.env]
+RAISE_HAND_CONFIG = 'C:/path/to/raise-hand-mcp/channels.json'
+RAISE_HAND_SESSION_FILE = 'C:/path/to/raise-hand-mcp/.sessions/CODEX_SESSION_UUID.env'
