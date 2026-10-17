@@ -154,19 +154,36 @@ def _discord_error(error: Exception) -> str:
     return "Discord returned an unexpected response. Check server configuration."
 
 
-def _message_view(message: dict) -> dict:
+def _message_view(message: dict, parent_channel_id: str | None = None) -> dict:
     # Return a compact view, including the ID of a discussion attached to this message.
     author = message.get("author", {})
-    return {
+    reference = message.get("message_reference") or {}
+    view = {
         "id": message["id"],
+        "channel_id": message.get("channel_id"),
+        "type": message.get("type", 0),
         "content": message.get("content", ""),
         "author": {"id": author.get("id"), "name": author.get("global_name") or author.get("username"),
                    "bot": author.get("bot", False)},
         "timestamp": message.get("timestamp"),
-        "reply_to": message.get("message_reference", {}).get("message_id"),
+        "reply_to": reference.get("message_id"),
+        "reply_channel_id": reference.get("channel_id"),
         "thread_id": (message.get("thread") or {}).get("id") or (
-            message.get("message_reference", {}).get("channel_id") if message.get("type") == 18 else None),
+            message["id"] if message.get("flags", 0) & (1 << 5) else None) or (
+            reference.get("channel_id") if message.get("type") == 18 else None),
     }
+    # Thread starters have no content of their own. Include the original task only
+    # for the parent already validated by _target_channel, without nested references.
+    if (message.get("type") == 21 and parent_channel_id is not None
+            and reference.get("channel_id") == parent_channel_id
+            and "referenced_message" in message):
+        source = message["referenced_message"]
+        if source is None:
+            view["referenced_message"] = None
+        elif (source.get("channel_id") == parent_channel_id
+              and source.get("id") == reference.get("message_id")):
+            view["referenced_message"] = _message_view(source)
+    return view
 
 
 async def _target_channel(client: httpx.AsyncClient, channel_id: str, thread_id: str | None) -> str:
@@ -271,7 +288,8 @@ async def read_messages(channel: str, after: str | None = None, limit: int = 50,
             messages = sorted(response.json(), key=lambda msg: int(msg["id"]))
         return {
             "channel": channel, "thread_id": thread_id, "session": identity,
-            "messages": [_message_view(msg) for msg in messages],
+            "messages": [_message_view(msg, selected["id"] if thread_id is not None else None)
+                         for msg in messages],
             "next_after": messages[-1]["id"] if messages else (after if after is not None else "0"),
             "next_before": messages[0]["id"] if messages else before,
             "page_full": len(messages) == limit,

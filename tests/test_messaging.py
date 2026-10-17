@@ -69,14 +69,21 @@ class MessagingTests(unittest.IsolatedAsyncioTestCase):
                     return httpx.Response(400)
                 thread = {"id": source["id"], "name": body["name"], "type": 11, "parent_id": channel}
                 self.threads[thread["id"]] = thread
-                self.history[thread["id"]] = []
                 source["thread"] = thread
+                source["flags"] = 32
+                self.serial += 1
+                self.history[thread["id"]] = [{
+                    "id": str(self.serial), "channel_id": thread["id"], "type": 21,
+                    "content": "", "author": source["author"],
+                    "message_reference": {"message_id": source["id"], "channel_id": channel},
+                    "referenced_message": dict(source),
+                }]
                 return httpx.Response(201, json=thread)
             self.serial += 1
             reference = body.get("message_reference", {})
             if reference and not any(m["id"] == reference["message_id"] for m in self.history[channel]):
                 return httpx.Response(404, json={"message": "Unknown message"})
-            msg = {"id": str(self.serial), "content": body["content"], "author": {"id": "999", "username": "bot", "bot": True},
+            msg = {"id": str(self.serial), "channel_id": channel, "content": body["content"], "author": {"id": "999", "username": "bot", "bot": True},
                    "message_reference": reference}
             self.history[channel].append(msg)
             return httpx.Response(200, json=msg)
@@ -122,16 +129,49 @@ class MessagingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply["message"]["reply_to"], first["message"]["id"])
         with self.session("antigravity"):
             history = await server.read_messages("main", thread_id=thread_id)
-            self.assertEqual(len(history["messages"]), 2)
+            self.assertEqual(len(history["messages"]), 3)
+            opener = history["messages"][0]
+            self.assertEqual(opener["type"], 21)
+            self.assertEqual(opener["channel_id"], thread_id)
+            self.assertEqual(opener["reply_channel_id"], "111")
+            self.assertEqual(opener["referenced_message"]["content"], sent["message"]["content"])
             self.assertEqual(history["thread_id"], thread_id)
             await server.send_message("main", "I can join too", thread_id=thread_id)
         main = await server.read_messages("main")
         self.assertEqual(len(main["messages"]), 1)
         self.assertEqual(main["messages"][0]["thread_id"], thread_id)
-        self.assertEqual(len((await server.read_messages("main", thread_id=thread_id))["messages"]), 3)
+        self.assertEqual(len((await server.read_messages("main", thread_id=thread_id))["messages"]), 4)
         bodies = [json.loads(r.content) for r in self.requests if r.method == "POST" and r.url.path.endswith("/messages")]
         self.assertEqual(bodies[2]["message_reference"]["channel_id"], thread_id)
         self.assertEqual(bodies[2]["allowed_mentions"], {"parse": [], "replied_user": False})
+
+    async def test_attached_thread_id_is_discovered_without_optional_thread_object(self):
+        for flags in (32, 32 | 4096):
+            self.history["111"] = [{"id": "10", "content": "task", "flags": flags}]
+            result = await server.read_messages("main")
+            self.assertEqual(result["messages"][0]["thread_id"], "10")
+        self.history["111"] = [{"id": "11", "type": 18,
+                                "message_reference": {"channel_id": "10"}}]
+        self.assertEqual((await server.read_messages("main"))["messages"][0]["thread_id"], "10")
+
+    async def test_thread_starter_context_is_limited_to_the_validated_parent(self):
+        sent = await server.send_message("main", "original task")
+        topic = (await server.start_thread("main", sent["message"]["id"], "Plan"))["thread"]["id"]
+        opener = self.history[topic][0]
+        for reference_channel, source_channel, source_id in (("222", "222", topic),
+                                                            ("111", "222", topic),
+                                                            ("111", "111", "999")):
+            opener["message_reference"]["channel_id"] = reference_channel
+            opener["referenced_message"].update(channel_id=source_channel, id=source_id)
+            result = await server.read_messages("main", thread_id=topic)
+            self.assertNotIn("referenced_message", result["messages"][0])
+        opener["message_reference"]["channel_id"] = "111"
+        opener["referenced_message"] = None
+        result = await server.read_messages("main", thread_id=topic)
+        self.assertIsNone(result["messages"][0]["referenced_message"])
+        del opener["referenced_message"]
+        result = await server.read_messages("main", thread_id=topic)
+        self.assertNotIn("referenced_message", result["messages"][0])
 
     async def test_threads_stay_with_their_parent_channel_and_validate_input(self):
         sent = await server.send_message("main", "plan")

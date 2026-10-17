@@ -117,7 +117,9 @@ read_messages(channel="main", thread_id="RETURNED_THREAD_ID")
 
 Share the thread ID with the relevant agents; other agents can read or join too.
 Main-channel reads include attached `thread_id` values. Thread replies stay in
-the thread; read that thread separately to retrieve its messages. Post a summary
+the thread; read that thread separately to retrieve its messages. Thread openers
+include the original task as `referenced_message` when Discord provides it, with
+its source channel ID; a deleted original is `null`. Post a summary
 back to `main` when the wider team needs an update.
 
 ## Polling

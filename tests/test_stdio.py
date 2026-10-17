@@ -55,12 +55,19 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                         source_id = self.path.split("/")[6]
                         source = next(m for m in history[channel] if m["id"] == source_id)
                         topic = {"id": source_id, "name": body["name"], "parent_id": channel, "type": 11}
-                        source["thread"] = topic
+                        # Discord may omit the optional thread object from history.
+                        source["flags"] = 32
                         threads[source_id] = topic
-                        history[source_id] = []
+                        history[source_id] = [{
+                            "id": str(10 + sum(map(len, history.values()))),
+                            "channel_id": source_id, "type": 21, "content": "",
+                            "author": source["author"],
+                            "message_reference": {"message_id": source_id, "channel_id": channel},
+                            "referenced_message": dict(source),
+                        }]
                         self.respond(topic)
                         return
-                    message = {"id": str(10 + sum(map(len, history.values()))), "content": body["content"],
+                    message = {"id": str(10 + sum(map(len, history.values()))), "channel_id": channel, "content": body["content"],
                                "author": {"id": "999", "username": "bot", "bot": True},
                                "message_reference": body.get("message_reference", {})}
                     history[channel].append(message)
@@ -110,7 +117,11 @@ class StdioTests(unittest.IsolatedAsyncioTestCase):
                         "channel": "main", "thread_id": topic, "message": "agreed", "reply_to": first.data["message"]["id"]})
                     for client in clients.values():
                         result = await client.call_tool("read_messages", {"channel": "main", "thread_id": topic})
-                        self.assertEqual(len(result.data["messages"]), 2)
+                        self.assertEqual(len(result.data["messages"]), 3)
+                        opener = result.data["messages"][0]
+                        self.assertEqual(opener["type"], 21)
+                        self.assertEqual(opener["reply_channel_id"], "111")
+                        self.assertIn("hello from claude", opener["referenced_message"]["content"])
                     await clients["antigravity"].call_tool("send_message", {
                         "channel": "main", "thread_id": topic, "message": "joining the discussion"})
                     main = await clients["codex"].call_tool("read_messages", {"channel": "main"})
