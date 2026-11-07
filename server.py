@@ -15,12 +15,12 @@ LLAMA_SCRIPTS_PATH = os.getenv("LLAMA_SCRIPTS_PATH")
 LLAMA_DEFAULT_PORT = os.getenv("LLAMA_CHAT_PORT", "11400")
 
 def _fetch_models() -> dict[str, str]:
-    """Run `npm run models:all --silent` to get {model_name: port} mapping."""
+    """Run `npm run models --silent` to get {model_name: port} mapping."""
     if not LLAMA_SCRIPTS_PATH:
         return {}
     try:
         result = subprocess.run(
-            ["npm", "run", "models:all", "--silent"],
+            ["npm", "run", "models", "--silent"],
             cwd=LLAMA_SCRIPTS_PATH,
             capture_output=True, text=True, shell=True, timeout=30,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -186,7 +186,7 @@ async def tiny_llm_task(prompt: str, model: str | None = None) -> str:
     """
     if not model:
         if not _MODEL_PORTS:
-            return "Error: no models found. Check LLAMA_SCRIPTS_PATH and that `npm run models:all` works."
+            return "Error: no models found. Check LLAMA_SCRIPTS_PATH and that `npm run models` works."
         model = next(iter(_MODEL_PORTS))
 
     port = _MODEL_PORTS.get(model, LLAMA_DEFAULT_PORT)
