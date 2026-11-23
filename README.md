@@ -29,6 +29,9 @@ Create a `.env` file in the root of this project and add your token and channel 
 DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_CHANNEL_ID=your_channel_id_here
 
+# Optional: enables notify_user (your own channel or DM channel, separate from the operator one)
+DISCORD_USER_CHANNEL_ID=your_user_channel_id_here
+
 # Optional: enables the tiny_llm_task tool
 # https://github.com/jjjpanda/llama-cpp-scripts
 LLAMA_SCRIPTS_PATH=/absolute/path/to/llama-cpp-scripts

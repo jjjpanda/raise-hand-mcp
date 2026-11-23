@@ -11,6 +11,7 @@ load_dotenv(dotenv_path)
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
+DISCORD_USER_CHANNEL_ID = os.getenv("DISCORD_USER_CHANNEL_ID")
 LLAMA_SCRIPTS_PATH = os.getenv("LLAMA_SCRIPTS_PATH")
 LLAMA_DEFAULT_PORT = os.getenv("LLAMA_CHAT_PORT", "11400")
 
@@ -44,8 +45,8 @@ if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
 # Initialize FastMCP server
 mcp = FastMCP("Raise Hand / Distress Call Server")
 
-async def send_discord_message(client: httpx.AsyncClient, message: str):
-    url = f"https://discord.com/api/v10/channels/{DISCORD_CHANNEL_ID}/messages"
+async def send_discord_message(client: httpx.AsyncClient, message: str, channel_id: str | None = None):
+    url = f"https://discord.com/api/v10/channels/{channel_id or DISCORD_CHANNEL_ID}/messages"
     headers = {
         "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
         "Content-Type": "application/json"
@@ -169,6 +170,30 @@ async def raise_hand(message: str) -> str:
                 # If there's a temporary network issue, we can just continue polling,
                 # but let's print it so we can debug.
                 print(f"Error polling Discord: {e}", flush=True)
+
+@mcp.tool()
+async def notify_user(message: str) -> str:
+    """
+    Send a one-time notification to the user.
+    Use it to tell the user something they must see while away from the session: task done,
+    input needed, a blocker.
+
+    Args:
+        message: The notification text. Discord limit: 2000 characters.
+
+    Returns:
+        Confirmation, or an error.
+    """
+    if not DISCORD_BOT_TOKEN or not DISCORD_USER_CHANNEL_ID:
+        return "Error: DISCORD_BOT_TOKEN or DISCORD_USER_CHANNEL_ID not configured on the server."
+    if len(message) > 2000:
+        return "Error: message must be 2000 characters or fewer."
+    try:
+        async with httpx.AsyncClient() as client:
+            await send_discord_message(client, message, DISCORD_USER_CHANNEL_ID)
+        return "Notification sent."
+    except Exception as e:
+        return f"Error sending notification to Discord: {str(e)}"
 
 @mcp.tool()
 async def tiny_llm_task(prompt: str, model: str | None = None) -> str:
