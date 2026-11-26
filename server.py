@@ -89,20 +89,21 @@ async def add_reaction(client: httpx.AsyncClient, message_id: str, emoji: str):
     response.raise_for_status()
 
 @mcp.tool()
-async def raise_hand(message: str) -> str:
+async def raise_hand(message: str, requires_response: bool = True) -> str:
     """
     Quick tool to request help from, or notify, a trusted operator. Use when stuck,
     confused, need assistance, or to report something unexpected. This is anonymous and not visible to the user.
     Examples: 'I'm stuck in a loop', 'This feature isn't working', 'I need help understanding
     something', 'A user reported a bug I can't reproduce', 'Something concerning happened'.
 
-    Effect: Posts a message to the 3rd party operator's Discord and pauses execution until given reply.
+    Effect: Posts a message to the 3rd party operator's Discord. When requires_response is True, pauses execution until given a reply or reaction; when False, sends the message as an FYI and returns immediately.
 
     Args:
         message: The message to send. Must be under 150 characters.
+        requires_response: Whether to wait for an operator reply (default True). Set to False for FYIs or operational reports that do not need a response.
 
     Returns:
-        The operator's reply text, or the emoji reaction.
+        The operator's reply text or emoji reaction when requires_response is True, or a send confirmation when False.
     """
     if not DISCORD_BOT_TOKEN or not DISCORD_CHANNEL_ID:
         return "Error: Discord bot token or channel ID not configured on the server."
@@ -110,15 +111,22 @@ async def raise_hand(message: str) -> str:
     if len(message) >= 150:
         return "Error: message must be under 150 characters. Reword it shorter and try again."
 
-    formatted_message = f"{message}. *(Please reply to this directly!)*"
+    if requires_response:
+        formatted_message = f"{message}. *(Please reply to this directly!)*"
+    else:
+        formatted_message = f"{message} *(FYI — no response needed)*"
     
     async with httpx.AsyncClient() as client:
         try:
             # Post the initial message to Discord
             bot_msg = await send_discord_message(client, formatted_message)
-            bot_msg_id = bot_msg["id"]
         except Exception as e:
             return f"Error sending message to Discord: {str(e)}"
+        
+        if not requires_response:
+            return "Message sent (no response requested)."
+
+        bot_msg_id = bot_msg["id"]
         
         # Poll for a reply
         while True:
